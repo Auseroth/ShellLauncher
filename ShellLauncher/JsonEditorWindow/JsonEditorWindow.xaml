@@ -1,0 +1,53 @@
+<Window x:Class="ShellLauncher.JsonEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit JSON Configuration" Height="450" Width="680"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Applications" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,2">
+            <TextBlock Width="160" Margin="5,0" Text="Name" FontWeight="SemiBold"/>
+            <TextBlock Width="260" Margin="5,0" Text="Path" FontWeight="SemiBold"/>
+            <TextBlock Width="160" Margin="5,0" Text="Arguments" FontWeight="SemiBold"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl Name="AppList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="0,4">
+                            <TextBox Width="100" Margin="5,0"
+                                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="WrapWithOverflow"
+                                     VerticalScrollBarVisibility="Disabled"/>
+                            <TextBox Width="260" Margin="5,0"
+                                     Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="WrapWithOverflow"
+                                     VerticalScrollBarVisibility="Disabled"/>
+                            <TextBox Width="250" Margin="5,0"
+                                     Text="{Binding Args, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="WrapWithOverflow"
+                                     VerticalScrollBarVisibility="Disabled"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="Add Application" Width="150" Margin="0,0,10,0" Click="AddApplication_Click"/>
+            <Button Content="Save and Close" Width="150" Click="SaveAndClose_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
