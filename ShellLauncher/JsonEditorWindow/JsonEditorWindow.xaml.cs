@@ -13,7 +13,7 @@ namespace ShellLauncher
 
         private readonly string _filePath;
 
-        public JsonEditorWindow(string filePath, List<AppConfig> defaultConfigs, string iconPath = null)
+        public JsonEditorWindow(string filePath, List<AppConfig> defaultConfigs, string? iconPath = null)
         {
             InitializeComponent();
             _filePath = filePath;
@@ -29,6 +29,14 @@ namespace ShellLauncher
         private void AddApplication_Click(object sender, RoutedEventArgs e)
         {
             AppConfigs.Add(new AppConfig { Name = "", Path = "", Args = "" });
+        }
+
+        private void RemoveApplication_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is AppConfig app)
+            {
+                AppConfigs.Remove(app);
+            }
         }
 
         private void SaveAndClose_Click(object sender, RoutedEventArgs e)

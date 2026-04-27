@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Build ShellTaskbar alongside ShellLauncher but don't treat it as a code reference -->
+    <ProjectReference Include="..\ShellTaskbar\ShellTaskbar.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Resources\DisableShell.ps1">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -32,5 +37,28 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- Copy ShellTaskbar output into ShellLauncher's output folder after every build/publish -->
+  <Target Name="CopyShellTaskbar" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <_TaskbarBuildProps>Configuration=$(Configuration)</_TaskbarBuildProps>
+      <_TaskbarBuildProps Condition="'$(RuntimeIdentifier)' != ''">$(_TaskbarBuildProps);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained)</_TaskbarBuildProps>
+      <_TaskbarSourceDir Condition="'$(RuntimeIdentifier)' == ''">..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\</_TaskbarSourceDir>
+      <_TaskbarSourceDir Condition="'$(RuntimeIdentifier)' != ''">..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\$(RuntimeIdentifier)\</_TaskbarSourceDir>
+      <_TaskbarDestDir Condition="'$(PublishDir)' != ''">$(PublishDir)</_TaskbarDestDir>
+      <_TaskbarDestDir Condition="'$(PublishDir)' == ''">$(OutputPath)</_TaskbarDestDir>
+    </PropertyGroup>
+
+    <!-- Restore first so project.assets.json includes the correct RID before building -->
+    <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarBuildProps)" Targets="Restore" />
+
+    <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarBuildProps)" Targets="Build" />
+
+    <ItemGroup>
+      <ShellTaskbarFiles Include="$(_TaskbarSourceDir)**\*.*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ShellTaskbarFiles)" DestinationFiles="@(ShellTaskbarFiles->'$(_TaskbarDestDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

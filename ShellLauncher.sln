@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.37111.16 d17.14
+VisualStudioVersion = 17.14.37111.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShellLauncher", "ShellLauncher\ShellLauncher.csproj", "{974764CA-65FB-41A2-A7EC-E815F0E30235}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShellTaskbar", "ShellTaskbar\ShellTaskbar.csproj", "{AE844307-EE91-1A22-03FA-9897E4C16447}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{974764CA-65FB-41A2-A7EC-E815F0E30235}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{974764CA-65FB-41A2-A7EC-E815F0E30235}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{974764CA-65FB-41A2-A7EC-E815F0E30235}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE844307-EE91-1A22-03FA-9897E4C16447}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE844307-EE91-1A22-03FA-9897E4C16447}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE844307-EE91-1A22-03FA-9897E4C16447}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE844307-EE91-1A22-03FA-9897E4C16447}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

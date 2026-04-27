@@ -13,14 +13,17 @@ using ShellLauncher;
 
 public class AppConfig
 {
-    public string Name { get; set; }
-    public string Path { get; set; }
-    public string Args { get; set; }
+    public string? Name { get; set; }
+    public string? Path { get; set; }
+    public string? Args { get; set; }
+    public bool ExcludeFromTaskbar { get; set; } = false;
 }
 
 class Program
 {
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hWnd);
     [DllImport("kernel32.dll")] static extern IntPtr GetConsoleWindow();
     [DllImport("kernel32.dll")] static extern bool AllocConsole();
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -74,12 +77,11 @@ class Program
     [STAThread]
     static void Main()
     {
-        // WinExe projects have no console by default — allocate one explicitly
         AllocConsole();
 
-        string configPath = @"C:\ProgramData\ShellLauncher\config.json";
+        string configPath  = @"C:\ProgramData\ShellLauncher\config.json";
         string logFilePath = @"C:\ProgramData\ShellLauncher\log.txt";
-        string readMePath = @"C:\ProgramData\ShellLauncher\README.txt";
+        string readMePath  = @"C:\ProgramData\ShellLauncher\README.txt";
 
         SetConsoleIcon("shell_dark.ico", logFilePath);
 
@@ -88,9 +90,7 @@ class Program
 
         bool hotkeyRegistered = RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.S);
         if (!hotkeyRegistered)
-        {
-            Log(logFilePath, "Warning: Failed to register Ctrl+Shift+S hotkey. It may be in use by another application.");
-        }
+            Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+S hotkey.");
 
         bool isVisible = false;
 
@@ -99,7 +99,7 @@ class Program
         List<AppConfig> apps;
         try
         {
-            apps = JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath));
+            apps = JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>();
         }
         catch (Exception ex)
         {
@@ -109,36 +109,78 @@ class Program
 
         if (!README(readMePath)) return;
 
+        // Taskbar is hardcoded — always launched and monitored, never needs a config entry
+        string taskbarExe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ShellTaskbar.exe");
+        int taskbarPid = 0;
+
         Console.WriteLine("ShellLauncher started. Monitoring applications...");
 
         while (true)
         {
+            // Hotkey toggle — always force console to front when showing
             if (PeekMessage(out MSG msg, IntPtr.Zero, WM_HOTKEY, WM_HOTKEY, 1))
             {
                 if (msg.wParam.ToInt32() == HOTKEY_ID)
                 {
                     isVisible = !isVisible;
                     ShowWindow(consoleHandle, isVisible ? SW_SHOW : SW_HIDE);
+                    if (isVisible)
+                    {
+                        BringWindowToTop(consoleHandle);
+                        SetForegroundWindow(consoleHandle);
+                    }
                 }
             }
 
+            // Monitor taskbar — check by process name only (no MainWindowHandle required on startup)
+            if (File.Exists(taskbarExe))
+            {
+                bool taskbarRunning = Process.GetProcessesByName("ShellTaskbar").Any();
+                if (!taskbarRunning)
+                {
+                    Console.WriteLine("ShellTaskbar is not running. Attempting to restart...");
+                    try
+                    {
+                        var proc = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = taskbarExe,
+                            UseShellExecute = true
+                        });
+                        if (proc != null)
+                        {
+                            taskbarPid = proc.Id;
+                            Console.WriteLine($"Started ShellTaskbar with PID {proc.Id}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(logFilePath, $"Failed to start ShellTaskbar: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("ShellTaskbar is running.");
+                }
+            }
+
+            // Monitor configured apps
             foreach (var app in apps)
             {
+                if (string.IsNullOrWhiteSpace(app.Path)) continue;
+
                 string exeName = System.IO.Path.GetFileNameWithoutExtension(app.Path);
                 launchedPids.TryGetValue(exeName, out int pid);
                 if (!IsProcessRunning(exeName, logFilePath, pid == 0 ? null : pid))
                 {
                     Console.WriteLine($"{app.Name} is not running. Attempting to restart...");
-
                     try
                     {
                         var proc = Process.Start(new ProcessStartInfo
                         {
                             FileName = app.Path,
-                            Arguments = app.Args,
+                            Arguments = app.Args ?? "",
                             UseShellExecute = true
                         });
-
                         if (proc != null)
                         {
                             launchedPids[exeName] = proc.Id;
