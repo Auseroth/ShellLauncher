@@ -17,6 +17,8 @@ public class AppConfig
     public string? Path { get; set; }
     public string? Args { get; set; }
     public bool ExcludeFromTaskbar { get; set; } = false;
+    public bool RunOnce { get; set; } = false;
+    public string? DependsOn { get; set; }
 }
 
 class Program
@@ -73,15 +75,17 @@ class Program
     }
 
     static Dictionary<string, int> launchedPids = new Dictionary<string, int>();
+    static HashSet<string> ranOnce = new HashSet<string>();
+    static HashSet<string> dependencyFired = new HashSet<string>(); // "appKey|parentPid"
 
     [STAThread]
     static void Main()
     {
         AllocConsole();
 
-        string configPath  = @"C:\ProgramData\ShellLauncher\config.json";
+        string configPath = @"C:\ProgramData\ShellLauncher\config.json";
         string logFilePath = @"C:\ProgramData\ShellLauncher\log.txt";
-        string readMePath  = @"C:\ProgramData\ShellLauncher\README.txt";
+        string readMePath = @"C:\ProgramData\ShellLauncher\README.txt";
 
         SetConsoleIcon("shell_dark.ico", logFilePath);
 
@@ -168,13 +172,82 @@ class Program
             {
                 if (string.IsNullOrWhiteSpace(app.Path)) continue;
 
+                string appKey = app.Name ?? app.Path;
                 string exeName = System.IO.Path.GetFileNameWithoutExtension(app.Path);
+
+                // --- DependsOn: fire once per parent session, never independently monitored ---
+                if (!string.IsNullOrWhiteSpace(app.DependsOn))
+                {
+                    var dependency = apps.FirstOrDefault(a =>
+                        string.Equals(a.Name, app.DependsOn, StringComparison.OrdinalIgnoreCase));
+
+                    if (dependency == null)
+                    {
+                        Log(logFilePath, $"{app.Name}: unknown DependsOn '{app.DependsOn}' — check the Name spelling.");
+                        continue;
+                    }
+
+                    string depExeName = System.IO.Path.GetFileNameWithoutExtension(dependency.Path);
+
+                    // Use the process with a main window — reliable sign the parent is fully up
+                    var parentProc = Process.GetProcessesByName(depExeName)
+                                           .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
+
+                    if (parentProc == null)
+                    {
+                        // Parent not running — clear fired state so script re-triggers on next parent launch
+                        dependencyFired.RemoveWhere(k => k.StartsWith(appKey + "|"));
+                        Console.WriteLine($"{app.Name}: waiting for '{app.DependsOn}'...");
+                        continue;
+                    }
+
+                    // Parent is running — only fire if this is a NEW parent session (new PID)
+                    string fireKey = $"{appKey}|{parentProc.Id}";
+                    if (dependencyFired.Contains(fireKey))
+                    {
+                        Console.WriteLine($"{app.Name}: already ran for current '{app.DependsOn}' session (PID {parentProc.Id}).");
+                        continue;
+                    }
+
+                    // New parent session — launch the script
+                    Log(logFilePath, $"{app.Name}: '{app.DependsOn}' started (PID {parentProc.Id}), launching {app.Name}...");
+                    try
+                    {
+                        var proc = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = app.Path,
+                            Arguments = app.Args ?? "",
+                            UseShellExecute = true
+                        });
+                        if (proc != null)
+                        {
+                            launchedPids[exeName] = proc.Id;
+                            dependencyFired.Add(fireKey);
+                            Console.WriteLine($"Started {app.Name} with PID {proc.Id}");
+                        }
+                        else
+                        {
+                            Log(logFilePath, $"Failed to start {app.Name}: Process returned null.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(logFilePath, $"Failed to start {app.Name}: {ex.Message}");
+                    }
+                    continue; // DependsOn apps are NEVER independently monitored
+                }
+
+                // --- Normal monitoring (no DependsOn) ---
+                if (app.RunOnce && ranOnce.Contains(appKey)) continue;
+
                 launchedPids.TryGetValue(exeName, out int pid);
                 if (!IsProcessRunning(exeName, logFilePath, pid == 0 ? null : pid))
                 {
                     Console.WriteLine($"{app.Name} is not running. Attempting to restart...");
                     try
                     {
+                        if (app.RunOnce) ranOnce.Add(appKey); // mark before launch so failure doesn't retry
+
                         var proc = Process.Start(new ProcessStartInfo
                         {
                             FileName = app.Path,
@@ -221,8 +294,9 @@ class Program
                 if (!p.HasExited)
                     return true;
             }
-            catch {
-            Log(logFilePath, $"{exeName} with PID {pid.Value} not found or has exited.");
+            catch
+            {
+                Log(logFilePath, $"{exeName} with PID {pid.Value} not found or has exited.");
             }
         }
 
@@ -244,14 +318,29 @@ class Program
                 {
                     Name = "Edge",
                     Path = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                    Args = "--no-first-run --start-maximized --user-data-dir=C:\\KioskEdgeProfile https://www.google.com https://www.yahoo.com"
+                    Args = "--no-first-run --start-maximized --user-data-dir=C:\\KioskEdgeProfile https://www.google.com https://www.yahoo.com",
+                    ExcludeFromTaskbar = false,
+                    RunOnce = false,
+                    DependsOn = null
                 },
                 new AppConfig
                 {
                     Name = "Notepad",
                     Path = "notepad.exe",
-                    Args = ""
-                }
+                    Args = "",
+                    ExcludeFromTaskbar = false,
+                    RunOnce = false,
+                    DependsOn = null
+                },
+                new AppConfig
+                    {
+                    Name = "ExampleScript",
+                    Path = "Powershell.exe",
+                    Args = "-windowstyle hidden -executionpolicy bypass -file \"C:\\Path\\To\\example_script.ps1\"",
+                    ExcludeFromTaskbar = true,
+                    RunOnce = true,
+                    DependsOn = "Edge"
+                    }
             };
 
             // A WPF Application instance is required for ShowDialog() to work
@@ -333,6 +422,14 @@ class Program
                 "    \"Name\": \"Notepad\",\n" +
                 "    \"Path\": \"notepad.exe\",\n" +
                 "    \"Args\": \"\"\n" +
+                "  },\n" +
+                "  {\n" +
+                "    \"Name\": \"ExampleScript\",\n" +
+                "    \"Path\": \"Powershell.exe\",\n" +
+                "    \"Args\": \"-windowstyle hidden -executionpolicy bypass -file \\\"C:\\\\Path\\\\To\\\\example_script.ps1\\\"\",\n" +
+                "    \"ExcludeFromTaskbar\": true,\n" +
+                "    \"RunOnce\": true,\n" +
+                "    \"DependsOn\": \"Edge\"\n" +
                 "  }\n" +
                 "]\n\n" +
                 "To re-open the editor after first run:\n" +

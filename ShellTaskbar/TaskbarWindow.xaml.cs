@@ -43,11 +43,14 @@ namespace ShellTaskbar
         const uint SPIF_SENDCHANGE = 0x0002;
 
         private readonly DispatcherTimer _clockTimer;
+        private FileSystemWatcher? _configWatcher;
+        private DispatcherTimer? _reloadDebounce;
 
         public TaskbarWindow()
         {
             InitializeComponent();
-            Loaded += OnLoaded;
+            Loaded          += OnLoaded;
+            ContentRendered += OnContentRendered;
 
             _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _clockTimer.Tick += (_, _) => ClockText.Text = DateTime.Now.ToString("hh:mm:ss tt");
@@ -58,8 +61,39 @@ namespace ShellTaskbar
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            PositionTaskbar();
             LoadApps();
+            StartConfigWatcher();
+        }
+
+        private void OnContentRendered(object? sender, EventArgs e)
+        {
+            ContentRendered -= OnContentRendered; // only needs to run once
+            PositionTaskbar();
+            Opacity = 1;
+        }
+
+        private void StartConfigWatcher()
+        {
+            string? dir = System.IO.Path.GetDirectoryName(ConfigPath);
+            if (dir == null || !Directory.Exists(dir)) return;
+
+            _configWatcher = new FileSystemWatcher(dir, System.IO.Path.GetFileName(ConfigPath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+
+            // Changed fires multiple times per save — debounce so we only reload once
+            _configWatcher.Changed += (_, _) =>
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _reloadDebounce?.Stop();
+                    _reloadDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+                    _reloadDebounce.Tick += (_, _) => { _reloadDebounce.Stop(); LoadApps(); };
+                    _reloadDebounce.Start();
+                });
+            };
         }
 
         private void PositionTaskbar()
@@ -93,26 +127,26 @@ namespace ShellTaskbar
 
             try
             {
-                var apps = JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(ConfigPath));
-                string selfName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var apps    = JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(ConfigPath), options);
+                string selfName = System.IO.Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
 
                 AppButtonsPanel.ItemsSource = apps?
                     .Where(a => !string.IsNullOrWhiteSpace(a.Path) &&
                                 !a.ExcludeFromTaskbar &&
-                                !Path.GetFileNameWithoutExtension(a.Path)
+                                !System.IO.Path.GetFileNameWithoutExtension(a.Path)
                                     .Equals(selfName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show($"Failed to load config: {ex.Message}", "ShellTaskbar",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                // Swallow silently — a MessageBox here freezes the taskbar UI thread
             }
         }
 
         private static IntPtr GetAppWindow(AppConfig app)
         {
-            string exeName = Path.GetFileNameWithoutExtension(app.Path);
+            string exeName = System.IO.Path.GetFileNameWithoutExtension(app.Path);
             return Process.GetProcessesByName(exeName)
                           .Where(p => p.MainWindowHandle != IntPtr.Zero)
                           .Select(p => p.MainWindowHandle)

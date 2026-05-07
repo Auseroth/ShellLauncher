@@ -21,4 +21,12 @@
     <Resource Include="Resources\power.ico"/>
   </ItemGroup>
 
+  <Target Name="CopyToShellLauncher" AfterTargets="Build;Publish">
+    <Copy
+      SourceFiles="$(TargetPath)"
+      DestinationFolder="$(SolutionDir)ShellLauncher\$(OutDir)"
+      SkipUnchangedFiles="false"
+      OverwriteReadOnlyFiles="true" />
+  </Target>
+
 </Project>
