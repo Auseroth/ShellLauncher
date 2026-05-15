@@ -44,7 +44,8 @@ class Program
     const uint MOD_SHIFT = 0x0004;
     const uint MOD_ALT = 0x0001;
     const uint WM_HOTKEY = 0x0312;
-    const int HOTKEY_ID = 1;
+    const int HOTKEY_ID      = 1; // Ctrl+Shift+Alt+S  — toggle console
+    const int HOTKEY_ID_CFG  = 2; // Ctrl+Shift+Alt+C  — open config editor
 
     [DllImport("user32.dll")]
     static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
@@ -92,9 +93,10 @@ class Program
         IntPtr consoleHandle = GetConsoleWindow();
         ShowWindow(consoleHandle, SW_HIDE);
 
-        bool hotkeyRegistered = RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.S);
-        if (!hotkeyRegistered)
-            Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+S hotkey.");
+        bool hotkeyRegistered = RegisterHotKey(IntPtr.Zero, HOTKEY_ID,     MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.S);
+        bool cfgHotkeyReg     = RegisterHotKey(IntPtr.Zero, HOTKEY_ID_CFG, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.C);
+        if (!hotkeyRegistered) Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+S hotkey.");
+        if (!cfgHotkeyReg)     Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+C hotkey.");
 
         bool isVisible = false;
 
@@ -132,6 +134,31 @@ class Program
                     {
                         BringWindowToTop(consoleHandle);
                         SetForegroundWindow(consoleHandle);
+                    }
+                }
+                else if (msg.wParam.ToInt32() == HOTKEY_ID_CFG)
+                {
+                    // Open the config editor on the UI thread
+                    if (Application.Current == null)
+                    {
+                        var wpfApp = new Application();
+                        wpfApp.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                    }
+
+                    var editor = new JsonEditorWindow(configPath,
+                        JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>(),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"));
+                    editor.ShowDialog();
+
+                    // Reload apps in case the user changed the config
+                    try
+                    {
+                        apps = JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>();
+                        Log(logFilePath, "Config reloaded after editor closed.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(logFilePath, $"Failed to reload config after editor: {ex.Message}");
                     }
                 }
             }
@@ -382,6 +409,8 @@ class Program
                 "ShellLauncher monitors a list of applications and automatically restarts\n" +
                 "them if they are closed or crash. It is designed for kiosk environments\n" +
                 "using Windows Shell Launcher (WESL).\n\n" +
+                "ShellTaskbar provides a custom taskbar with app buttons, a clock, and\n" +
+                "power options. It is launched and monitored automatically by ShellLauncher.\n\n" +
 
                 "SETUP\n" +
                 "-----\n" +
@@ -389,7 +418,8 @@ class Program
                 "  See the BUILDING THE INSTALLER section below.\n" +
                 "  The installer will automatically run EnableShell.ps1.\n\n" +
                 "Option B - Manual setup:\n" +
-                "  1. Copy ShellLauncher.exe and all associated files to:\n" +
+                "  1. Copy ShellLauncher.exe, ShellTaskbar.exe, and all associated\n" +
+                "     files to:\n" +
                 "       C:\\Program Files (x86)\\ShellLauncher\\\n\n" +
                 "  2. Run Resources\\EnableShell.ps1 as Administrator to:\n" +
                 "       - Enable the Windows Shell Launcher feature (WESL)\n" +
@@ -401,47 +431,79 @@ class Program
                 "  editor window will open. Fill in your applications and click\n" +
                 "  'Save and Close'. ShellLauncher will then begin monitoring.\n\n" +
 
-                "CONFIGURATION\n" +
-                "-------------\n" +
+                "HOTKEYS\n" +
+                "-------\n" +
+                "  Ctrl + Shift + Alt + S  ->  Show / Hide the console status window\n" +
+                "  Ctrl + Shift + Alt + C  ->  Open the configuration editor at any time\n\n" +
+
+                "CONFIGURATION — EDITOR\n" +
+                "----------------------\n" +
                 "Config file location:\n" +
                 "  C:\\ProgramData\\ShellLauncher\\config.json\n\n" +
-                "On first run, a GUI editor will open automatically if no config exists.\n" +
-                "Each row in the editor has three fields:\n" +
-                "  Name  - Display name used in logs and console output\n" +
-                "  Path  - Full path or filename of the executable\n" +
-                "  Args  - Command-line arguments (leave blank if not needed)\n\n" +
-                "Use 'Add Application' to add more rows, then 'Save and Close' when done.\n\n" +
-                "Example of the saved config.json format:\n" +
+                "On first run, the editor opens automatically if no config exists.\n" +
+                "At any time, press Ctrl+Shift+Alt+C to reopen it.\n\n" +
+                "Editor columns:\n" +
+                "  Name              Display name used in logs and the taskbar button.\n" +
+                "  Path              Full path or filename of the executable.\n" +
+                "  Arguments         Command-line arguments (leave blank if not needed).\n" +
+                "  Hide from Taskbar When checked, no taskbar button is shown for this app.\n" +
+                "                    The app still runs and is monitored normally.\n" +
+                "  Run Once          When checked, the app launches once and is never\n" +
+                "                    restarted. Ignored if Depends On is set.\n" +
+                "  Depends On        Enter the Name of another app in the list. This app\n" +
+                "                    will only launch when that parent app has a visible\n" +
+                "                    window, and will re-launch once per parent session.\n" +
+                "                    Leave blank for no dependency.\n\n" +
+
+                "CONFIGURATION — DIRECT JSON EDITING\n" +
+                "------------------------------------\n" +
+                "For automated deployment, edit config.json directly:\n\n" +
                 "[\n" +
                 "  {\n" +
                 "    \"Name\": \"Edge\",\n" +
                 "    \"Path\": \"C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\",\n" +
-                "    \"Args\": \"--no-first-run --start-maximized --guest https://www.example.com\"\n" +
+                "    \"Args\": \"--no-first-run --start-maximized --app=https://example.com\",\n" +
+                "    \"ExcludeFromTaskbar\": false,\n" +
+                "    \"RunOnce\": false,\n" +
+                "    \"DependsOn\": null\n" +
                 "  },\n" +
                 "  {\n" +
-                "    \"Name\": \"Notepad\",\n" +
-                "    \"Path\": \"notepad.exe\",\n" +
-                "    \"Args\": \"\"\n" +
-                "  },\n" +
-                "  {\n" +
-                "    \"Name\": \"ExampleScript\",\n" +
+                "    \"Name\": \"LoginScript\",\n" +
                 "    \"Path\": \"Powershell.exe\",\n" +
-                "    \"Args\": \"-windowstyle hidden -executionpolicy bypass -file \\\"C:\\\\Path\\\\To\\\\example_script.ps1\\\"\",\n" +
+                "    \"Args\": \"-WindowStyle Hidden -ExecutionPolicy Bypass -File \\\"C:\\\\Scripts\\\\login.ps1\\\"\",\n" +
                 "    \"ExcludeFromTaskbar\": true,\n" +
-                "    \"RunOnce\": true,\n" +
+                "    \"RunOnce\": false,\n" +
                 "    \"DependsOn\": \"Edge\"\n" +
                 "  }\n" +
                 "]\n\n" +
-                "To re-open the editor after first run:\n" +
-                "  Delete config.json and restart ShellLauncher, or edit the file directly.\n\n" +
+                "Field reference:\n" +
+                "  Name              string  — required, must be unique if used in DependsOn\n" +
+                "  Path              string  — required, full path or filename on PATH\n" +
+                "  Args              string  — optional, command-line arguments\n" +
+                "  ExcludeFromTaskbar bool   — default false\n" +
+                "  RunOnce           bool   — default false\n" +
+                "  DependsOn         string  — optional, exact Name of parent app or null\n\n" +
+                "Changes to config.json are picked up automatically by ShellTaskbar.\n" +
+                "ShellLauncher requires a restart (or re-open via hotkey) to use changes.\n\n" +
+
+                "SHELLTASKBAR\n" +
+                "------------\n" +
+                "ShellTaskbar is the custom taskbar launched by ShellLauncher. It:\n" +
+                "  - Displays a button for each app not marked ExcludeFromTaskbar\n" +
+                "  - Clicking a button restores/focuses the app window\n" +
+                "  - Right-clicking a button gives Restore / Minimize / Maximize / Close\n" +
+                "  - Displays the current time (12-hour format)\n" +
+                "  - Provides a power button (Shut Down / Restart) with confirmation\n" +
+                "  - Automatically reloads config.json when it changes on disk\n" +
+                "  - Restarts automatically if it crashes (monitored by ShellLauncher)\n\n" +
 
                 "CONSOLE WINDOW\n" +
                 "--------------\n" +
                 "ShellLauncher runs with a hidden console window showing live status.\n" +
-                "Toggle its visibility with:\n\n" +
-                "  Ctrl + Shift + Alt + S  ->  Show / Hide the console window\n\n" +
+                "Toggle its visibility with:  Ctrl + Shift + Alt + S\n\n" +
                 "The console displays:\n" +
                 "  - Which apps are running or being restarted\n" +
+                "  - DependsOn waiting / session-fired messages\n" +
                 "  - Startup and config status messages\n" +
                 "  - Errors and warnings\n\n" +
 
@@ -449,32 +511,30 @@ class Program
                 "----\n" +
                 "Log file location:\n" +
                 "  C:\\ProgramData\\ShellLauncher\\log.txt\n\n" +
-                "Logs include timestamps, restart events, and any errors encountered.\n\n" +
+                "Logs include timestamps, restart events, dependency events, and errors.\n\n" +
 
                 "BUILDING THE INSTALLER\n" +
                 "----------------------\n" +
-                "The NSIS installer script is included in the repository at:\n" +
+                "The NSIS installer script is at:\n" +
                 "  ShellLauncher\\Resources\\ShellLauncher.nsi\n\n" +
                 "Requirements:\n" +
                 "  - NSIS 3.x  (https://nsis.sourceforge.io)\n" +
-                "  - The project must be published first:\n" +
-                "      dotnet publish -c Release -r win-x86 --self-contained true\n\n" +
-                "Before compiling the .nsi script you MUST update these paths to match\n" +
-                "your local machine:\n\n" +
-                "  Outfile  - Path where the installer .exe will be written\n" +
-                "             Default: C:\\temp file transfer\\...\\ShellLauncher_Install.exe\n\n" +
-                "  Icon     - Path to Shell_dark.ico inside your publish output folder\n" +
-                "             Default: ...\\bin\\Release\\net8.0\\publish\\win-x86\\ShellLauncher\\Shell_dark.ico\n\n" +
-                "  File /r  - Path to your publish output folder\n" +
-                "             Default: C:\\temp file transfer\\...\\publish\\win-x86\\ShellLauncher\\*.*\n\n" +
-                "To compile once paths are updated:\n" +
-                "  Right-click ShellLauncher.nsi in Windows Explorer -> 'Compile NSIS Script'\n" +
+                "  - Publish both projects first (use the FolderProfile in VS or run):\n" +
+                "      dotnet publish ShellLauncher\\ShellLauncher.csproj -c Release\n\n" +
+                "  Publishing ShellLauncher automatically publishes ShellTaskbar into\n" +
+                "  the same output folder via the CopyShellTaskbarPublish MSBuild target.\n\n" +
+                "Before compiling the .nsi script, update these paths for your machine:\n" +
+                "  Outfile  — path where the installer .exe will be written\n" +
+                "  Icon     — path to Shell_dark.ico in the publish output\n" +
+                "  File /r  — path to the publish output folder\n\n" +
+                "To compile:\n" +
+                "  Right-click ShellLauncher.nsi -> 'Compile NSIS Script'\n" +
                 "  Or run: makensis ShellLauncher.nsi\n\n" +
                 "The installer will silently:\n" +
                 "  1. Copy all files to C:\\Program Files (x86)\\ShellLauncher\\\n" +
                 "  2. Create a Start Menu shortcut\n" +
                 "  3. Register in Add/Remove Programs\n" +
-                "  4. Automatically run EnableShell.ps1 to configure WESL and auto-login\n\n" +
+                "  4. Run EnableShell.ps1 to configure WESL and auto-login\n\n" +
                 "The uninstaller will:\n" +
                 "  1. Run DisableShell.ps1 to restore the default Explorer shell\n" +
                 "  2. Remove all installed files and registry entries\n\n" +
@@ -482,19 +542,20 @@ class Program
                 "REMOVING KIOSK MODE\n" +
                 "-------------------\n" +
                 "Automatic: Uninstall ShellLauncher via Add/Remove Programs.\n" +
-                "  DisableShell.ps1 will run automatically and restore Explorer.\n\n" +
-                "Manual: Run the following in PowerShell as Administrator:\n" +
+                "  DisableShell.ps1 runs automatically and restores Explorer.\n\n" +
+                "Manual: Run in PowerShell as Administrator:\n" +
                 "  $WESL = [wmiclass]\"\\\\.\\root\\standardcimv2\\embedded:WESL_UserSetting\"\n" +
                 "  $WESL.SetEnabled($false)\n\n" +
 
                 "FILES\n" +
                 "-----\n" +
-                "  C:\\Program Files (x86)\\ShellLauncher\\ShellLauncher.exe     - Main executable\n" +
-                "  C:\\Program Files (x86)\\ShellLauncher\\resources\\EnableShell.ps1  - Kiosk setup\n" +
-                "  C:\\Program Files (x86)\\ShellLauncher\\resources\\DisableShell.ps1 - Kiosk removal\n" +
-                "  C:\\ProgramData\\ShellLauncher\\config.json                   - App configuration\n" +
-                "  C:\\ProgramData\\ShellLauncher\\log.txt                       - Runtime log\n" +
-                "  C:\\ProgramData\\ShellLauncher\\README.txt                    - This file\n";
+                "  C:\\Program Files (x86)\\ShellLauncher\\ShellLauncher.exe        — Main monitor\n" +
+                "  C:\\Program Files (x86)\\ShellLauncher\\ShellTaskbar.exe         — Custom taskbar\n" +
+                "  C:\\Program Files (x86)\\ShellLauncher\\resources\\EnableShell.ps1  — Kiosk setup\n" +
+                "  C:\\Program Files (x86)\\ShellLauncher\\resources\\DisableShell.ps1 — Kiosk removal\n" +
+                "  C:\\ProgramData\\ShellLauncher\\config.json                      — App config\n" +
+                "  C:\\ProgramData\\ShellLauncher\\log.txt                          — Runtime log\n" +
+                "  C:\\ProgramData\\ShellLauncher\\README.txt                       — This file\n";
 
             File.WriteAllText(readMePath, readmeContent);
             Console.WriteLine($"README file created at {readMePath}");

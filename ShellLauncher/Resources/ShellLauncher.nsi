@@ -58,6 +58,9 @@ Section "Install"
     ;powershell enableShell
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\EnableShell.ps1"'
 
+    ; schedule autologon checker task
+    nsExec::ExecToLog 'schtasks /Create /TN "AutoLoginChecker" /TR "powershell.exe -ExecutionPolicy Bypass -File \"C:\Program Files (x86)\ShellLauncher\resources\autologin.ps1\"" /SC ONLOGON /RU SYSTEM /rl HIGHEST /f'
+
 SectionEnd
 
 Section "Uninstall"
@@ -70,6 +73,7 @@ Section "Uninstall"
     Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
     RMDir "$SMPROGRAMS\${APPNAME}"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+    nsExec::ExecToLog 'schtasks /Delete /TN "AutoLoginChecker" /F'
 
 
 

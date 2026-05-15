@@ -48,9 +48,14 @@ try {
     "Error: $($_.Exception.Message) at $(Get-Date)" | Add-Content $log
 }
 #set auto login registry values
+try {
 Set-ItemProperty -Path $regPath -Name "AutoAdminLogon" -Value $desiredAutoLogin
 Set-ItemProperty -Path $regPath -Name "DefaultUserName" -Value $desiredUserName
 Set-ItemProperty -Path $regPath -Name "DefaultDomainName" -Value $desiredDomain
+} catch {
+    Write-Host "Failed to set AutoLogin registry values: $($_.Exception.Message)" -ForegroundColor Red
+    "Error: $($_.Exception.Message) at $(Get-Date)" | Add-Content $log
+}
 do {
     $currentAutoLogin = (Get-ItemProperty -Path $regPath -Name "AutoAdminLogon").AutoAdminLogon
     $currentUserName = (Get-ItemProperty -Path $regPath -Name "DefaultUserName").DefaultUserName

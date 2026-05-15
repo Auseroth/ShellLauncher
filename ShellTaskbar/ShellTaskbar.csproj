@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>..\ShellLauncher\Shell_dark.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+    <UseAppHost>true</UseAppHost>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,16 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Embedded resource — no copy needed, compiled into the assembly -->
     <Resource Include="Resources\power.ico"/>
   </ItemGroup>
-
-  <Target Name="CopyToShellLauncher" AfterTargets="Build;Publish">
-    <Copy
-      SourceFiles="$(TargetPath)"
-      DestinationFolder="$(SolutionDir)ShellLauncher\$(OutDir)"
-      SkipUnchangedFiles="false"
-      OverwriteReadOnlyFiles="true" />
-  </Target>
 
 </Project>

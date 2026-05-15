@@ -76,7 +76,8 @@
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
             <Button Content="Add Application" Width="150" Margin="0,0,10,0" Click="AddApplication_Click"/>
-            <Button Content="Save and Close" Width="150" Click="SaveAndClose_Click"/>
+            <Button Content="Save and Close"  Width="150" Margin="0,0,10,0" Click="SaveAndClose_Click"/>
+            <Button Content="? Help"          Width="80"                    Click="Help_Click"/>
         </StackPanel>
     </Grid>
 </Window>

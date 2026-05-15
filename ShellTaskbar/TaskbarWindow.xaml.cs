@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace ShellTaskbar
 {
@@ -63,13 +64,25 @@ namespace ShellTaskbar
         {
             LoadApps();
             StartConfigWatcher();
+            SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         }
 
         private void OnContentRendered(object? sender, EventArgs e)
         {
-            ContentRendered -= OnContentRendered; // only needs to run once
+            ContentRendered -= OnContentRendered;
             PositionTaskbar();
             Opacity = 1;
+        }
+
+        // Fires on resolution, orientation, or DPI change
+        private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            // Delay lets the display driver fully apply the new mode before we measure
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+            {
+                UpdateLayout(); // force WPF to remeasure at the new resolution
+                PositionTaskbar();
+            });
         }
 
         private void StartConfigWatcher()

@@ -19,11 +19,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Build ShellTaskbar alongside ShellLauncher but don't treat it as a code reference -->
     <ProjectReference Include="..\ShellTaskbar\ShellTaskbar.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Resources\autologin.ps1">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\DisableShell.ps1">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -38,27 +40,51 @@
     </None>
   </ItemGroup>
 
-  <!-- Copy ShellTaskbar output into ShellLauncher's output folder after every build/publish -->
-  <Target Name="CopyShellTaskbar" AfterTargets="Build;Publish">
+  <!-- Build: copy ShellTaskbar to ShellLauncher build output, matching current configuration -->
+  <Target Name="CopyShellTaskbarBuild" AfterTargets="Build">
     <PropertyGroup>
+      <!-- Match ShellLauncher's own build — no forced RID, framework-dependent is fine for dev -->
       <_TaskbarBuildProps>Configuration=$(Configuration)</_TaskbarBuildProps>
-      <_TaskbarBuildProps Condition="'$(RuntimeIdentifier)' != ''">$(_TaskbarBuildProps);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained)</_TaskbarBuildProps>
-      <_TaskbarSourceDir Condition="'$(RuntimeIdentifier)' == ''">..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\</_TaskbarSourceDir>
-      <_TaskbarSourceDir Condition="'$(RuntimeIdentifier)' != ''">..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\$(RuntimeIdentifier)\</_TaskbarSourceDir>
-      <_TaskbarDestDir Condition="'$(PublishDir)' != ''">$(PublishDir)</_TaskbarDestDir>
-      <_TaskbarDestDir Condition="'$(PublishDir)' == ''">$(OutputPath)</_TaskbarDestDir>
+      <_TaskbarSourceDir>..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\</_TaskbarSourceDir>
     </PropertyGroup>
 
-    <!-- Restore first so project.assets.json includes the correct RID before building -->
     <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarBuildProps)" Targets="Restore" />
-
     <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarBuildProps)" Targets="Build" />
 
     <ItemGroup>
-      <ShellTaskbarFiles Include="$(_TaskbarSourceDir)**\*.*" />
+      <ShellTaskbarBuildFiles Include="$(_TaskbarSourceDir)*.*" />
     </ItemGroup>
 
-    <Copy SourceFiles="@(ShellTaskbarFiles)" DestinationFiles="@(ShellTaskbarFiles->'$(_TaskbarDestDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ShellTaskbarBuildFiles)"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true" />
+
+    <Message Text="CopyShellTaskbarBuild: $(OutputPath)" Importance="high" />
+  </Target>
+
+  <!-- Publish: ShellTaskbar self-contained -> publish output folder -->
+  <Target Name="CopyShellTaskbarPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_TaskbarRID Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_TaskbarRID>
+      <_TaskbarRID Condition="'$(RuntimeIdentifier)' == ''">win-x86</_TaskbarRID>
+      <_TaskbarPublishProps>Configuration=$(Configuration);RuntimeIdentifier=$(_TaskbarRID);SelfContained=true</_TaskbarPublishProps>
+      <_TaskbarSourceDir>..\ShellTaskbar\bin\$(Configuration)\net8.0-windows\$(_TaskbarRID)\</_TaskbarSourceDir>
+    </PropertyGroup>
+
+    <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarPublishProps)" Targets="Restore" />
+    <MSBuild Projects="..\ShellTaskbar\ShellTaskbar.csproj" Properties="$(_TaskbarPublishProps)" Targets="Build" />
+
+    <ItemGroup>
+      <ShellTaskbarPublishFiles Include="$(_TaskbarSourceDir)**\*.*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ShellTaskbarPublishFiles)"
+          DestinationFiles="@(ShellTaskbarPublishFiles->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true" />
+
+    <Message Text="CopyShellTaskbarPublish: $(PublishDir)" Importance="high" />
   </Target>
 
 </Project>
