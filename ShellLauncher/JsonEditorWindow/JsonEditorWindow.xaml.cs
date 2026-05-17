@@ -41,26 +41,16 @@ namespace ShellLauncher
             {
                 string json = JsonSerializer.Serialize(AppConfigs, new JsonSerializerOptions { WriteIndented = true });
                 string? dir = System.IO.Path.GetDirectoryName(_filePath);
+
                 if (!string.IsNullOrEmpty(dir))
                     Directory.CreateDirectory(dir);
 
-                // Retry up to 5 times with a short delay in case the file is momentarily locked
-                // by ShellLauncher's monitor loop or ShellTaskbar's FileSystemWatcher
-                int maxAttempts = 5;
-                for (int attempt = 1; attempt <= maxAttempts; attempt++)
-                {
-                    try
-                    {
-                        using var fs = new FileStream(_filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-                        using var sw = new StreamWriter(fs);
-                        sw.Write(json);
-                        break; // success
-                    }
-                    catch (IOException) when (attempt < maxAttempts)
-                    {
-                        System.Threading.Thread.Sleep(200);
-                    }
-                }
+                if (File.Exists(_filePath))
+                    File.Delete(_filePath);
+
+                System.Threading.Thread.Sleep(1000);
+
+                File.WriteAllText(_filePath, json, System.Text.Encoding.UTF8);
 
                 MessageBox.Show("Configuration saved successfully!", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
