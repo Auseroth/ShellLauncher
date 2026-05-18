@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "ShellLauncher": {
+      "commandName": "Project"
+    }
+  }
+}

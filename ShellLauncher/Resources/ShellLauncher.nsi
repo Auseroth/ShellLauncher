@@ -43,9 +43,10 @@ Section "Install"
     ; Write uninstaller
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-    ; Start Menu shortcut
+    ; start menu shortcuts
+    SetShellVarContext all
     CreateDirectory "$SMPROGRAMS\${APPNAME}"
-    CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXENAME}"
+    CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXENAME}" "/c"
 
     ; Write registry info
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME}"
@@ -63,15 +64,21 @@ Section "Install"
 
 SectionEnd
 
+
 Section "Uninstall"
 
     ;powershell DisableShell
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\DisableShell.ps1"'
+
     ; Remove files
     Delete "$INSTDIR\*.*"
     RMDir /r "$INSTDIR"
+
+    ; delete start menu shortcuts
+    setshellvarcontext all
     Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
     RMDir "$SMPROGRAMS\${APPNAME}"
+
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
     nsExec::ExecToLog 'schtasks /Delete /TN "AutoLoginChecker" /F'
 

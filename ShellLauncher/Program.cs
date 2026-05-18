@@ -80,13 +80,95 @@ class Program
     static HashSet<string> dependencyFired = new HashSet<string>(); // "appKey|parentPid"
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
-        AllocConsole();
-
-        string configPath = @"C:\ProgramData\ShellLauncher\config.json";
+        string configPath  = @"C:\ProgramData\ShellLauncher\config.json";
         string logFilePath = @"C:\ProgramData\ShellLauncher\log.txt";
-        string readMePath = @"C:\ProgramData\ShellLauncher\README.txt";
+        string readMePath  = @"C:\ProgramData\ShellLauncher\README.txt";
+
+        // --- Argument handling ---
+        if (args.Length > 0)
+        {
+            string arg = args[0].ToLowerInvariant();
+
+            if (arg == "/?" || arg == "/help" || arg == "-?" || arg == "-help")
+            {
+                AllocConsole();
+                Console.WriteLine("ShellLauncher - Command Line Usage");
+                Console.WriteLine("===================================");
+                Console.WriteLine();
+                Console.WriteLine("  ShellLauncher.exe          Run normally (kiosk monitoring mode).");
+                Console.WriteLine("  ShellLauncher.exe /c       Open the configuration editor only,");
+                Console.WriteLine("                             then exit. No monitoring is started.");
+                Console.WriteLine("  ShellLauncher.exe /?       Show this help message.");
+                Console.WriteLine();
+                Console.WriteLine("Notes:");
+                Console.WriteLine("  /c is intended for admin use via the Start Menu shortcut.");
+                Console.WriteLine($"  Config file: {configPath}");
+                Console.WriteLine($"  Log file:    {logFilePath}");
+                Console.WriteLine();
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+                return;
+            }
+
+            if (arg == "/c" || arg == "-c")
+            {
+                // If not elevated, relaunch this process elevated and exit
+                if (!IsElevated())
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = Process.GetCurrentProcess().MainModule!.FileName,
+                            Arguments = "/c",
+                            Verb = "runas",
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception)
+                    {
+                        // User cancelled the UAC prompt — just exit silently
+                    }
+                    return;
+                }
+
+                // Already elevated — open the editor
+                List<AppConfig> existing;
+                try
+                {
+                    existing = File.Exists(configPath)
+                        ? JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>()
+                        : new List<AppConfig>();
+                }
+                catch (Exception ex)
+                {
+                    Log(logFilePath, $"/c: Failed to read config: {ex.Message}");
+                    existing = new List<AppConfig>();
+                }
+
+                var wpfApp = new Application();
+                wpfApp.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+                var editor = new JsonEditorWindow(
+                    configPath,
+                    existing,
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"));
+                editor.ShowDialog();
+
+                if (!editor.LaunchAfterSave)
+                {
+                    wpfApp.Shutdown();
+                    return;
+                }
+
+                // LaunchAfterSave = true — fall through into normal monitoring mode below
+            }
+        }
+
+        // --- Normal monitoring mode ---
+        AllocConsole();
 
         SetConsoleIcon("shell_dark.ico", logFilePath);
 
@@ -145,10 +227,26 @@ class Program
                         wpfApp.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                     }
 
-                    var editor = new JsonEditorWindow(configPath,
+                    var editor = new JsonEditorWindow(
+                        configPath,
                         JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>(),
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"));
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"),
+                        launchedPids,
+                        onKillComplete: () =>
+                        {
+                            ranOnce.Clear();
+                            dependencyFired.Clear();
+                            Log(logFilePath, "All apps closed via editor. Tracking state reset.");
+                        });
                     editor.ShowDialog();
+
+                    if (editor.ShutdownAfterKill)
+                    {
+                        Log(logFilePath, "ShellLauncher exiting at admin request via Close All Apps.");
+                        UnregisterHotKey(IntPtr.Zero, HOTKEY_ID);
+                        UnregisterHotKey(IntPtr.Zero, HOTKEY_ID_CFG);
+                        Environment.Exit(0);
+                    }
 
                     // Reload apps in case the user changed the config
                     try
@@ -583,5 +681,12 @@ class Program
         }
 
         Console.WriteLine(logMessage);
+    }
+
+    static bool IsElevated()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var principal = new System.Security.Principal.WindowsPrincipal(identity);
+        return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
     }
 }
