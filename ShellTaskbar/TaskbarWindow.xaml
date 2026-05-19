@@ -8,6 +8,22 @@
         Background="#1E1E1E"
         Height="40"
         Opacity="0">
+    <Window.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="Restart Taskbar" Click="RestartTaskbar_Click"/>
+        </ContextMenu>
+    </Window.ContextMenu>
+    <Window.Resources>
+        <ControlTemplate x:Key="FlatButton" TargetType="Button">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}">
+                <ContentPresenter HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Margin="0,-2,0,0"/>
+            </Border>
+        </ControlTemplate>
+    </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -15,55 +31,239 @@
         </Grid.ColumnDefinitions>
 
         <!-- App buttons -->
-        <ItemsControl Grid.Column="0" Name="AppButtonsPanel" VerticalAlignment="Center">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Margin="4,0"/>
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Button Content="{Binding Name}"
-                            Tag="{Binding}"
-                            Click="AppButton_Click"
-                            Margin="4,0,0,0"
-                            Padding="12,0"
-                            Height="30"
-                            Foreground="White"
-                            Background="#3A3A3A"
-                            BorderBrush="#555"
-                            BorderThickness="1"
-                            Cursor="Hand">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Restore"  Tag="{Binding}" Click="ContextRestore_Click"/>
-                                <MenuItem Header="Minimize" Tag="{Binding}" Click="ContextMinimize_Click"/>
-                                <MenuItem Header="Maximize" Tag="{Binding}" Click="ContextMaximize_Click"/>
-                                <Separator/>
-                                <MenuItem Header="Close"    Tag="{Binding}" Click="ContextClose_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+            <ItemsControl Name="AppButtonsPanel">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="4,0"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Button Content="{Binding Name}"
+                                    Tag="{Binding}"
+                                    Click="AppButton_Click"
+                                    Margin="4,0,0,0"
+                                    Padding="12,0"
+                                    Height="30"
+                                    Foreground="White"
+                                    BorderBrush="#555"
+                                    BorderThickness="1"
+                                    Cursor="Hand">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Restore"  Tag="{Binding}" Click="ContextRestore_Click"/>
+                                        <MenuItem Header="Minimize" Tag="{Binding}" Click="ContextMinimize_Click"/>
+                                        <MenuItem Header="Maximize" Tag="{Binding}" Click="ContextMaximize_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Close"    Tag="{Binding}" Click="ContextClose_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="#3A3A3A"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                <Setter Property="Background" Value="#4A6A4A"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <!-- Running indicator bar at bottom -->
+                            <Border Height="3"
+                                    VerticalAlignment="Bottom"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="6,0,2,0"
+                                    CornerRadius="1">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                <Setter Property="Background" Value="#4CAF50"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-        <!-- Right side: clock + power button -->
+            <!-- Transient (settings-launched) windows -->
+            <ItemsControl Name="TransientPanel">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Name}"
+                                Margin="4,0,0,0"
+                                Padding="12,0"
+                                Height="30"
+                                Foreground="White"
+                                Background="#3A4A6A"
+                                BorderBrush="#555"
+                                BorderThickness="1"
+                                Cursor="Hand"
+                                Tag="{Binding}"
+                                Click="TransientButton_Click"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- System windows (console, config editor)  visible only when open -->
+            <ItemsControl Name="SystemPanel">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Name}"
+                                Margin="4,0,0,0"
+                                Padding="12,0"
+                                Height="30"
+                                Foreground="White"
+                                BorderBrush="#555"
+                                BorderThickness="1"
+                                Cursor="Hand"
+                                Tag="{Binding}"
+                                Click="SystemButton_Click">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="#5A3A6A"/>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Right side: clock + volume + power button -->
         <StackPanel Grid.Column="1" Orientation="Horizontal"
                     VerticalAlignment="Center" Margin="0,0,6,0">
 
-            <TextBlock Name="ClockText"
+          
+            <!-- Volume controls -->
+            <Button Width="30" Height="30"
+                    Background="#3A3A3A"
+                    BorderBrush="#555"
+                    BorderThickness="1"
+                    Foreground="White"
+                    Cursor="Hand"
+                    Margin="0,0,2,0"
+                    ToolTip="Mute / Unmute"
+                    Click="VolumeMute_Click">
+                <TextBlock Name="MuteButtonText"
+                           Text="&#xE995;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Button>
+
+            <Button Width="30" Height="30"
+                    Background="#3A3A3A"
+                    BorderBrush="#555"
+                    BorderThickness="1"
+                    Foreground="White"
+                    Cursor="Hand"
+                    Margin="0,0,2,0"
+                    ToolTip="Volume down"
+                    Click="VolumeDown_Click"
+                    Content="&#x2212;"
+                    FontSize="18"
+                    FontWeight="Bold"
+                    Template="{StaticResource FlatButton}"/>
+
+            <TextBlock Name="VolumeText"
                        Foreground="White"
-                       FontSize="14"
+                       FontSize="12"
+                       Width="30"
+                       TextAlignment="Center"
                        VerticalAlignment="Center"
-                       Margin="0,0,8,0"
-                       Text="00:00:00"/>
+                       Margin="0,0,2,0"
+                       Text="--"/>
+
+            <Button Width="30" Height="30"
+                    Background="#3A3A3A"
+                    BorderBrush="#555"
+                    BorderThickness="1"
+                    Foreground="White"
+                    Cursor="Hand"
+                    Margin="0,0,8,0"
+                    ToolTip="Volume up"
+                    Click="VolumeUp_Click"
+                    Content="&#x2B;"
+                    FontSize="18"
+                    FontWeight="Bold"
+                    Template="{StaticResource FlatButton}"/>
+
+            <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock Name="ClockText"
+                 Foreground="White"
+                 FontSize="12"
+                 TextAlignment="Center"
+                 Text="00:00:00"/>
+                <TextBlock Name="DateText"
+                 Foreground="#AAAAAA"
+                 FontSize="12"
+                 TextAlignment="Center"
+                 Text="Mon 01/01"/>
+            </StackPanel>
+
+
+            <Button Width="30" Height="30"
+                    Background="#3A3A3A"
+                    BorderBrush="#555"
+                    BorderThickness="1"
+                    Foreground="White"
+                    Cursor="Hand"
+                    Margin="0,0,2,0"
+                    ToolTip="Settings"
+                    Click="SettingsButton_Click">
+                <TextBlock Text="&#xE713;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Pair a device..."    Click="PairDevice_Click"/>
+                        <MenuItem Header="Sound devices..."    Click="AudioDevices_Click"/>
+                        <MenuItem Header="Mouse settings">
+                            <MenuItem Header="Mouse properties..."  Click="MouseSettings_Click"/>
+                            <Separator/>
+                            <MenuItem Header="Cursor size: Default"        Click="CursorSize1_Click"/>
+                            <MenuItem Header="Cursor size: Medium"         Click="CursorSize3_Click"/>
+                            <MenuItem Header="Cursor size: Large"          Click="CursorSize5_Click"/>
+                            <MenuItem Header="Cursor size: Extra Large"    Click="CursorSize15_Click"/>
+                        </MenuItem>
+                        <MenuItem Header="Network settings..." Click="NetworkSettings_Click"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
 
             <Button Width="30" Height="30"
                     Background="#3A3A3A"
                     BorderBrush="#555"
                     BorderThickness="1"
                     Cursor="Hand"
+                    Margin="0,0,0,0"
                     ToolTip="Power options"
                     Click="PowerButton_Click">
                 <Image Source="pack://application:,,,/Resources/power.ico"

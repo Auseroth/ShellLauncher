@@ -84,7 +84,7 @@ namespace ShellLauncher
         private void SaveAndLaunch_Click(object sender, RoutedEventArgs e)
         {
             if (!TrySave()) return;
-            MessageBox.Show("Configuration saved. ShellLauncher will now start monitoring.", "Saved — Launching",
+            MessageBox.Show("Configuration saved. ShellLauncher will now start monitoring.", "Saved - Launching",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             LaunchAfterSave = true;
             Close();
@@ -115,7 +115,7 @@ namespace ShellLauncher
                     var proc = Process.GetProcessById(kvp.Value);
                     if (!proc.HasExited) { proc.Kill(); killed++; }
                 }
-                catch { /* process already gone */ }
+                catch { }
             }
 
             foreach (var p in Process.GetProcessesByName("ShellTaskbar"))
@@ -133,57 +133,19 @@ namespace ShellLauncher
         private void Help_Click(object sender, RoutedEventArgs e)
         {
             MessageBox.Show(
-                "SHELLLAUNCHER — CONFIGURATION HELP\n" +
-                "????????????????????????????????????\n\n" +
-
+                "SHELLLAUNCHER - CONFIGURATION HELP\n\n" +
                 "COLUMNS\n" +
-                "???????\n" +
-                "Name            Display name shown in logs and the taskbar button.\n" +
-                "Path            Full path or filename of the executable.\n" +
-                "                  Examples: notepad.exe\n" +
-                "                            C:\\Program Files\\App\\App.exe\n" +
-                "Arguments       Command-line args passed to the executable.\n" +
-                "                  Leave blank if none are needed.\n" +
-                "Hide from Taskbar  When checked, the app runs silently in the\n" +
-                "                   background with no taskbar button.\n" +
-                "Run Once        When checked, the app launches once at startup\n" +
-                "                and is never restarted if it exits.\n" +
-                "                  Note: Has no effect if Depends On is set —\n" +
-                "                  the app always fires once per parent session.\n" +
-                "Depends On      Enter the exact Name of another app in this list.\n" +
-                "                The app will only launch when that parent app is\n" +
-                "                running (has a visible window), and will re-launch\n" +
-                "                once each time the parent restarts.\n" +
-                "                  Leave blank for no dependency.\n\n" +
-
+                "Name              Display name shown in logs and the taskbar button.\n" +
+                "Path              Full path or filename of the executable.\n" +
+                "Arguments         Command-line args passed to the executable.\n" +
+                "Hide from Taskbar When checked, the app runs silently with no taskbar button.\n" +
+                "Launch Mode       Monitor=launch+restart, RunOnce=launch once, NoLaunch=taskbar only.\n" +
+                "Depends On        Enter the exact Name of another app. This app launches once\n" +
+                "                  per parent session. Disables Launch Mode (always Monitor).\n\n" +
                 "HOTKEYS\n" +
-                "???????\n" +
-                "Ctrl+Shift+Alt+S   Show / hide the console status window.\n" +
-                "Ctrl+Shift+Alt+C   Open this config editor at any time.\n\n" +
-
-                "DIRECT JSON EDITING  (for automated deployment)\n" +
-                "????????????????????????????????????????????????\n" +
-                "File location:  C:\\ProgramData\\ShellLauncher\\config.json\n\n" +
-                "[\n" +
-                "  {\n" +
-                "    \"Name\": \"Edge\",\n" +
-                "    \"Path\": \"C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\",\n" +
-                "    \"Args\": \"--no-first-run --start-maximized --app=https://example.com\",\n" +
-                "    \"ExcludeFromTaskbar\": false,\n" +
-                "    \"RunOnce\": false,\n" +
-                "    \"DependsOn\": null\n" +
-                "  },\n" +
-                "  {\n" +
-                "    \"Name\": \"LoginScript\",\n" +
-                "    \"Path\": \"Powershell.exe\",\n" +
-                "    \"Args\": \"-WindowStyle Hidden -ExecutionPolicy Bypass -File \\\"C:\\\\Scripts\\\\login.ps1\\\"\",\n" +
-                "    \"ExcludeFromTaskbar\": true,\n" +
-                "    \"RunOnce\": false,\n" +
-                "    \"DependsOn\": \"Edge\"\n" +
-                "  }\n" +
-                "]\n\n" +
-                "To re-open this editor after first run:\n" +
-                "  Press Ctrl+Shift+Alt+C, or delete config.json and restart ShellLauncher.",
+                "Ctrl+Shift+Alt+S  Show/hide the console status window.\n" +
+                "Ctrl+Shift+Alt+C  Open this config editor at any time.\n\n" +
+                "Config file:  C:\\ProgramData\\ShellLauncher\\config.json",
                 "ShellLauncher Help",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

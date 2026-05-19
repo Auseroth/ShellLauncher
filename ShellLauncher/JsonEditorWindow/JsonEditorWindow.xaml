@@ -14,11 +14,11 @@
         <TextBlock Grid.Row="0" Text="Applications" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,2">
-            <TextBlock Width="160" Margin="5,0" Text="Name" FontWeight="SemiBold"/>
-            <TextBlock Width="260" Margin="5,0" Text="Path" FontWeight="SemiBold"/>
-            <TextBlock Width="160" Margin="5,0" Text="Arguments" FontWeight="SemiBold"/>
+            <TextBlock Width="160" Margin="5,0" Text="Name"              FontWeight="SemiBold"/>
+            <TextBlock Width="260" Margin="5,0" Text="Path"              FontWeight="SemiBold"/>
+            <TextBlock Width="160" Margin="5,0" Text="Arguments"         FontWeight="SemiBold"/>
             <TextBlock Width="110" Margin="5,0" Text="Hide from Taskbar" FontWeight="SemiBold" TextWrapping="Wrap"/>
-            <TextBlock Width="90"  Margin="5,0" Text="Run Once" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock Width="120" Margin="5,0" Text="Launch Mode"       FontWeight="SemiBold" TextWrapping="Wrap"/>
             <TextBlock Width="140" Margin="5,0" Text="Depends On (Name)" FontWeight="SemiBold" TextWrapping="Wrap"/>
         </StackPanel>
 
@@ -46,18 +46,24 @@
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Center"
                                       IsChecked="{Binding ExcludeFromTaskbar, UpdateSourceTrigger=PropertyChanged}"
-                                      ToolTip="When checked, this app will not appear as a button on the taskbar"/>
-                            <CheckBox Width="90" Margin="10,0,0,0"
+                                      IsEnabled="{Binding ExcludeFromTaskbarEnabled}"
+                                      ToolTip="Not available when Launch Mode is NoLaunch - NoLaunch apps always appear in the taskbar"/>
+                            <ComboBox Width="120" Margin="5,0"
                                       VerticalAlignment="Center"
-                                      HorizontalAlignment="Center"
-                                      IsChecked="{Binding RunOnce, UpdateSourceTrigger=PropertyChanged}"
-                                      ToolTip="When checked, this app will only be launched once and never restarted"/>
+                                      SelectedValue="{Binding LaunchMode, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Content"
+                                      IsEnabled="{Binding LaunchModeEnabled}"
+                                      ToolTip="Monitor=launch+restart, RunOnce=launch once, NoLaunch=taskbar only">
+                                <ComboBoxItem Content="Monitor"  />
+                                <ComboBoxItem Content="RunOnce"  />
+                                <ComboBoxItem Content="NoLaunch" />
+                            </ComboBox>
                             <TextBox Width="140" Margin="10,0,0,0"
                                      VerticalAlignment="Center"
                                      Text="{Binding DependsOn, UpdateSourceTrigger=PropertyChanged}"
                                      TextWrapping="WrapWithOverflow"
                                      VerticalScrollBarVisibility="Disabled"
-                                     ToolTip="Enter the Name of another app that must be running before this one launches. Leave blank for no dependency."/>
+                                     ToolTip="Enter the Name of another app that must be running before this one launches. Setting this disables Launch Mode."/>
                             <Button Content="X"
                                     Width="28" Height="28"
                                     Margin="6,0,0,0"
