@@ -65,7 +65,7 @@
                                         <Setter Property="Background" Value="#3A3A3A"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                <Setter Property="Background" Value="#4A6A4A"/>
+                                                <Setter Property="Background" Value="#0E171E"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -82,7 +82,7 @@
                                         <Setter Property="Background" Value="Transparent"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                <Setter Property="Background" Value="#4CAF50"/>
+                                                <Setter Property="Background" Value="#5F85A1"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
