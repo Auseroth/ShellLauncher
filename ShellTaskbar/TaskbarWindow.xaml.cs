@@ -138,6 +138,12 @@ namespace ShellTaskbar
             UpdateVolumeDisplay();
             TransientPanel.ItemsSource = _transientApps;
             SystemPanel.ItemsSource    = new[] { _editorEntry };
+            // Set up the ComboBox items
+            DpiComboBox.ItemsSource = _dpiOptions;
+            _currentDpiPercent = ReadCurrentDpiFromRegistry();
+
+            // Auto-select the current matching registry DPI percent
+            DpiComboBox.SelectedValue = _currentDpiPercent;
         }
 
         private void OnContentRendered(object? sender, EventArgs e)
@@ -737,6 +743,104 @@ namespace ShellTaskbar
                 SetForegroundWindow(hWnd);
             }
        }
+
+        private int _currentDpiPercent = 100;
+        public class DpiOption : System.ComponentModel.INotifyPropertyChanged
+        {
+            public int Percent { get; set; }
+            public string Label => $"{Percent}%";
+
+            private bool _isSelected;
+            public bool IsSelected
+            {
+                get => _isSelected;
+                set { _isSelected = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected))); }
+            }
+
+            public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        }
+
+        private readonly System.Collections.ObjectModel.ObservableCollection<DpiOption> _dpiOptions =
+            new(new[] { 100, 125, 150, 175, 200 }.Select(p => new DpiOption { Percent = p }));
+
+        private void DpiComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || DpiComboBox.SelectedValue is not int percent) return;
+
+            // If it matches what's already live, do nothing
+            if (percent == _currentDpiPercent) return;
+
+            var result = MessageBox.Show(
+                $"Display scale set to {percent}%.\n\nThis only takes effect for apps opened from now on, " +
+                "or fully after you sign out. Sign out now to apply everywhere?",
+                "Display Scale Changed",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                // Try to write to registry before signing out
+                if (WriteDpiToRegistry(percent))
+                {
+                    _currentDpiPercent = percent;
+                    Process.Start("shutdown", "/l");
+                }
+                else
+                {
+                    MessageBox.Show("Failed to write display scale setting.", "ShellTaskbar",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                // User clicked "No" — Roll back the visual selection to the current active value
+                DpiComboBox.SelectionChanged -= DpiComboBox_SelectionChanged; // Temporarily unhook
+                DpiComboBox.SelectedValue = _currentDpiPercent;               // Revert selection
+                DpiComboBox.SelectionChanged += DpiComboBox_SelectionChanged; // Re-hook
+            }
+        }
+
+        private bool WriteDpiToRegistry(int percent)
+        {
+            try
+            {
+                int dpiValue = (int)(96 * (percent / 100.0));
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", true);
+                if (key == null) return false;
+
+                key.SetValue("LogPixels", dpiValue, Microsoft.Win32.RegistryValueKind.DWord);
+                key.SetValue("Win8DpiScaling", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DPI registry write failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void UpdateDpiSelectionVisual()
+        {
+            foreach (var opt in _dpiOptions)
+                opt.IsSelected = opt.Percent == _currentDpiPercent;
+        }
+
+        private int ReadCurrentDpiFromRegistry()
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+                if (key?.GetValue("LogPixels") is int dpiValue && dpiValue > 0)
+                {
+                    int percent = (int)Math.Round(dpiValue / 96.0 * 100);
+                    // Snap to nearest valid preset
+                    int[] presets = { 100, 125, 150, 175, 200 };
+                    return presets.OrderBy(p => Math.Abs(p - percent)).First();
+                }
+            }
+            catch { }
+            return 100;
+        }
 
         [DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 

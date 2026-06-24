@@ -15,18 +15,24 @@ SilentUninstall silent
 
 Page instfiles
 
+Function CloseAppIfRunning
+    ; Force kill NewSync.exe using taskkill (runs as admin, most reliable)
+    nsExec::ExecToLog 'taskkill /F /IM "${EXENAME}"'
+    nsExec::ExecToLog 'taskkill /F /IM "ShellTaskbar.exe"'
+    Sleep 1000
+FunctionEnd
+
 ;--------------------------------
 ; Version Information
 ;--------------------------------
 VIProductVersion "1.0.0.0"
-VIAddVersionKey "CompanyName" "City of Newport News - Public Safety IT"
-VIAddVersionKey "LegalCopyright" "© 2025 City of Newport News"
+VIAddVersionKey "CompanyName" "Austin Sharman"
+VIAddVersionKey "LegalCopyright" "Copyright (c) 2024 Austin Sharman. All rights reserved."
 VIAddVersionKey "FileVersion" "1.0.0.0"
 VIAddVersionKey "ProductVersion" "1.0.0.0"
 VIAddVersionKey "Author" "Austin Sharman"
 VIAddVersionKey "FileDescription" "App to launch and monitor any number of apps, designed to be ran as a custom shell app Written By Austin Sharman"
 VIAddVersionKey "InternalName" "${APPNAME}"
-VIAddVersionKey "Trademarks" "City of Newport News"
 
 ;--------------------------------
 ; Installer Icon
@@ -34,6 +40,7 @@ VIAddVersionKey "Trademarks" "City of Newport News"
 Icon "C:\\temp file transfer\\9.VisualStudio\\field testing\\ShellLauncher\\ShellLauncher\\bin\\Release\\net8.0\\publish\\win-x86\\ShellLauncher\\Shell_dark.ico"
 
 Section "Install"
+    Call CloseAppIfRunning
 
     SetOutPath "$INSTDIR"
 

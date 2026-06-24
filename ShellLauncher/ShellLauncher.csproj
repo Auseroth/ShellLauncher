@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>Shell_dark.ico</ApplicationIcon>
+	<AssemblyVersion>2.2.1</AssemblyVersion>
+	<FileVersion>2.2.1.0</FileVersion>
+	<InformationalVersion>2.2.1+build.1</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

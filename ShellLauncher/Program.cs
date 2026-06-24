@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace ShellLauncher
@@ -98,7 +99,7 @@ namespace ShellLauncher
         const uint MOD_SHIFT = 0x0004;
         const uint MOD_ALT = 0x0001;
         const uint WM_HOTKEY = 0x0312;
-        const int HOTKEY_ID = 1; // Ctrl+Shift+Alt+S -- toggle console
+        const int HOTKEY_ID = 1;     // Ctrl+Shift+Alt+S -- toggle console
         const int HOTKEY_ID_CFG = 2; // Ctrl+Shift+Alt+C -- open config editor
 
         [DllImport("user32.dll")]
@@ -132,13 +133,16 @@ namespace ShellLauncher
         static Dictionary<string, int> launchedPids = new Dictionary<string, int>();
         static HashSet<string> ranOnce = new HashSet<string>();
         static HashSet<string> dependencyFired = new HashSet<string>(); // "appKey|parentPid"
+        static UpdateService? _updateService;
+        static UpdateConfig?  _updateConfig;
 
         [STAThread]
         static void Main(string[] args)
         {
-            string configPath = @"C:\ProgramData\ShellLauncher\config.json";
+            string configPath  = @"C:\ProgramData\ShellLauncher\config.json";
             string logFilePath = @"C:\ProgramData\ShellLauncher\log.txt";
-            string readMePath = @"C:\ProgramData\ShellLauncher\README.txt";
+            string readMePath  = @"C:\ProgramData\ShellLauncher\README.txt";
+            string iconPath    = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico");
 
             // --- Argument handling ---
             if (args.Length > 0)
@@ -175,9 +179,9 @@ namespace ShellLauncher
                         {
                             Process.Start(new ProcessStartInfo
                             {
-                                FileName = Process.GetCurrentProcess().MainModule!.FileName,
-                                Arguments = "/c",
-                                Verb = "runas",
+                                FileName        = Process.GetCurrentProcess().MainModule!.FileName,
+                                Arguments       = "/c",
+                                Verb            = "runas",
                                 UseShellExecute = true
                             });
                         }
@@ -205,14 +209,23 @@ namespace ShellLauncher
                     var wpfApp = new Application();
                     wpfApp.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+                    // Init update service so the Updates button works in /c mode
+                    _updateConfig  = UpdateConfig.Load();
+                    _updateService = new UpdateService(msg => Log(logFilePath, msg));
+                    _updateService.Configure(_updateConfig);
+
                     var editor = new JsonEditorWindow(
                         configPath,
                         existing,
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"));
+                        iconPath,
+                        updateService: _updateService,
+                        updateConfig:  _updateConfig);
                     editor.ShowDialog();
 
                     if (!editor.LaunchAfterSave)
                     {
+                        _updateService.Dispose();
+                        _updateService = null;
                         wpfApp.Shutdown();
                         return;
                     }
@@ -229,10 +242,10 @@ namespace ShellLauncher
             IntPtr consoleHandle = GetConsoleWindow();
             ShowWindow(consoleHandle, SW_HIDE);
 
-            bool hotkeyRegistered = RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.S);
-            bool cfgHotkeyReg = RegisterHotKey(IntPtr.Zero, HOTKEY_ID_CFG, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.C);
+            bool hotkeyRegistered = RegisterHotKey(IntPtr.Zero, HOTKEY_ID,     MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.S);
+            bool cfgHotkeyReg    = RegisterHotKey(IntPtr.Zero, HOTKEY_ID_CFG, MOD_CTRL | MOD_SHIFT | MOD_ALT, (uint)ConsoleKey.C);
             if (!hotkeyRegistered) Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+S hotkey.");
-            if (!cfgHotkeyReg) Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+C hotkey.");
+            if (!cfgHotkeyReg)    Log(logFilePath, "Warning: Failed to register Ctrl+Shift+Alt+C hotkey.");
 
             bool isVisible = false;
 
@@ -250,6 +263,14 @@ namespace ShellLauncher
             }
 
             if (!README(readMePath)) return;
+
+            // Init update service (skip if already set up via /c fall-through)
+            if (_updateService == null)
+            {
+                _updateConfig  = UpdateConfig.Load();
+                _updateService = new UpdateService(msg => Log(logFilePath, msg));
+                _updateService.Configure(_updateConfig);
+            }
 
             // Taskbar is hardcoded -- always launched and monitored, never needs a config entry
             string taskbarExe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ShellTaskbar.exe");
@@ -284,14 +305,16 @@ namespace ShellLauncher
                         var editor = new JsonEditorWindow(
                             configPath,
                             JsonSerializer.Deserialize<List<AppConfig>>(File.ReadAllText(configPath)) ?? new List<AppConfig>(),
-                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "shell_dark.ico"),
+                            iconPath,
                             launchedPids,
                             onKillComplete: () =>
                             {
                                 ranOnce.Clear();
                                 dependencyFired.Clear();
                                 Log(logFilePath, "All apps closed via editor. Tracking state reset.");
-                            });
+                            },
+                            updateService: _updateService,
+                            updateConfig:  _updateConfig);
                         editor.ShowDialog();
 
                         if (editor.ShutdownAfterKill)
@@ -326,7 +349,7 @@ namespace ShellLauncher
                         {
                             var proc = Process.Start(new ProcessStartInfo
                             {
-                                FileName = taskbarExe,
+                                FileName        = taskbarExe,
                                 UseShellExecute = true
                             });
                             if (proc != null)
@@ -351,7 +374,7 @@ namespace ShellLauncher
                 {
                     if (string.IsNullOrWhiteSpace(app.Path)) continue;
 
-                    string appKey = app.Name ?? app.Path;
+                    string appKey  = app.Name ?? app.Path;
                     string exeName = System.IO.Path.GetFileNameWithoutExtension(app.Path);
 
                     // --- DependsOn: fire once per parent session, never independently monitored ---
@@ -370,7 +393,7 @@ namespace ShellLauncher
 
                         // Use the process with a main window — reliable sign the parent is fully up
                         var parentProc = Process.GetProcessesByName(depExeName)
-                                               .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
+                                                .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
 
                         if (parentProc == null)
                         {
@@ -394,8 +417,8 @@ namespace ShellLauncher
                         {
                             var proc = Process.Start(new ProcessStartInfo
                             {
-                                FileName = app.Path,
-                                Arguments = app.Args ?? "",
+                                FileName        = app.Path,
+                                Arguments       = app.Args ?? "",
                                 UseShellExecute = true
                             });
                             if (proc != null)
@@ -417,9 +440,8 @@ namespace ShellLauncher
                     }
 
                     // --- Normal monitoring (no DependsOn) ---
-                    // Where launch decisions are made, replace RunOnce checks with LaunchMode:
                     bool shouldLaunch = app.LaunchMode != "NoLaunch";
-                    bool isOnce = app.LaunchMode == "RunOnce";
+                    bool isOnce       = app.LaunchMode == "RunOnce";
 
                     if (!shouldLaunch) continue;
                     if (isOnce && ranOnce.Contains(appKey)) continue;
@@ -434,8 +456,8 @@ namespace ShellLauncher
 
                             var proc = Process.Start(new ProcessStartInfo
                             {
-                                FileName = app.Path,
-                                Arguments = app.Args ?? "",
+                                FileName        = app.Path,
+                                Arguments       = app.Args ?? "",
                                 UseShellExecute = true
                             });
                             if (proc != null)
@@ -497,35 +519,35 @@ namespace ShellLauncher
             try
             {
                 var defaultConfigs = new List<AppConfig>
-            {
-                new AppConfig
                 {
-                    Name               = "Edge",
-                    Path               = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                    Args               = "--no-first-run --start-maximized --user-data-dir=C:\\KioskEdgeProfile https://www.google.com",
-                    ExcludeFromTaskbar = false,
-                    LaunchMode         = "Monitor",
-                    DependsOn          = null
-                },
-                new AppConfig
-                {
-                    Name               = "Notepad",
-                    Path               = "notepad.exe",
-                    Args               = "",
-                    ExcludeFromTaskbar = false,
-                    LaunchMode         = "Monitor",
-                    DependsOn          = null
-                },
-                new AppConfig
-                {
-                    Name               = "ExampleScript",
-                    Path               = "Powershell.exe",
-                    Args               = "-windowstyle hidden -executionpolicy bypass -file \"C:\\Path\\To\\example_script.ps1\"",
-                    ExcludeFromTaskbar = true,
-                    LaunchMode         = "RunOnce",
-                    DependsOn          = "Edge"
-                }
-            };
+                    new AppConfig
+                    {
+                        Name               = "Edge",
+                        Path               = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                        Args               = "--no-first-run --start-maximized --user-data-dir=C:\\KioskEdgeProfile https://www.google.com",
+                        ExcludeFromTaskbar = false,
+                        LaunchMode         = "Monitor",
+                        DependsOn          = null
+                    },
+                    new AppConfig
+                    {
+                        Name               = "Notepad",
+                        Path               = "notepad.exe",
+                        Args               = "",
+                        ExcludeFromTaskbar = false,
+                        LaunchMode         = "Monitor",
+                        DependsOn          = null
+                    },
+                    new AppConfig
+                    {
+                        Name               = "ExampleScript",
+                        Path               = "Powershell.exe",
+                        Args               = "-windowstyle hidden -executionpolicy bypass -file \"C:\\Path\\To\\example_script.ps1\"",
+                        ExcludeFromTaskbar = true,
+                        LaunchMode         = "RunOnce",
+                        DependsOn          = "Edge"
+                    }
+                };
 
                 // A WPF Application instance is required for ShowDialog() to work
                 if (Application.Current == null)
@@ -725,13 +747,14 @@ namespace ShellLauncher
 
                     "FILES\n" +
                     "-----\n" +
-                    "  C:\\Program Files (x86)\\ShellLauncher\\ShellLauncher.exe        — Main monitor\n" +
-                    "  C:\\Program Files (x86)\\ShellLauncher\\ShellTaskbar.exe         — Custom taskbar\n" +
+                    "  C:\\Program Files (x86)\\ShellLauncher\\ShellLauncher.exe          — Main monitor\n" +
+                    "  C:\\Program Files (x86)\\ShellLauncher\\ShellTaskbar.exe           — Custom taskbar\n" +
                     "  C:\\Program Files (x86)\\ShellLauncher\\resources\\EnableShell.ps1  — Kiosk setup\n" +
                     "  C:\\Program Files (x86)\\ShellLauncher\\resources\\DisableShell.ps1 — Kiosk removal\n" +
-                    "  C:\\ProgramData\\ShellLauncher\\config.json                      — App config\n" +
-                    "  C:\\ProgramData\\ShellLauncher\\log.txt                          — Runtime log\n" +
-                    "  C:\\ProgramData\\ShellLauncher\\README.txt                       — This file\n";
+                    "  C:\\ProgramData\\ShellLauncher\\config.json                        — App config\n" +
+                    "  C:\\ProgramData\\ShellLauncher\\update_config.json                 — Update config\n" +
+                    "  C:\\ProgramData\\ShellLauncher\\log.txt                            — Runtime log\n" +
+                    "  C:\\ProgramData\\ShellLauncher\\README.txt                         — This file\n";
 
                 File.WriteAllText(readMePath, readmeContent);
                 Console.WriteLine($"README file created at {readMePath}");

@@ -11,24 +11,32 @@ namespace ShellLauncher
     public partial class JsonEditorWindow : Window
     {
         public ObservableCollection<AppConfig> AppConfigs { get; set; }
-        public bool LaunchAfterSave { get; private set; } = false;
+        public bool LaunchAfterSave   { get; private set; } = false;
         public bool ShutdownAfterKill { get; private set; } = false;
 
         private readonly string _filePath;
         private readonly Dictionary<string, int>? _launchedPids;
         private readonly Action? _onKillComplete;
+        private readonly string? _iconPath;
+        private readonly UpdateService? _updateService;
+        private readonly UpdateConfig?  _updateConfig;
 
         public JsonEditorWindow(
             string filePath,
             List<AppConfig> defaultConfigs,
             string? iconPath = null,
             Dictionary<string, int>? launchedPids = null,
-            Action? onKillComplete = null)
+            Action? onKillComplete = null,
+            UpdateService? updateService = null,
+            UpdateConfig? updateConfig = null)
         {
             InitializeComponent();
             _filePath       = filePath;
             _launchedPids   = launchedPids;
             _onKillComplete = onKillComplete;
+            _iconPath       = iconPath;
+            _updateService  = updateService;
+            _updateConfig   = updateConfig;
             AppConfigs      = new ObservableCollection<AppConfig>(defaultConfigs);
             AppList.ItemsSource = AppConfigs;
 
@@ -128,6 +136,25 @@ namespace ShellLauncher
 
             ShutdownAfterKill = true;
             Close();
+        }
+
+        private void Updates_Click(object sender, RoutedEventArgs e)
+        {
+            var config       = _updateConfig ?? UpdateConfig.Load();
+            var service      = _updateService;
+            bool ownsService = service is null;
+
+            if (ownsService)
+            {
+                service = new UpdateService(_ => { });
+                service.Configure(config);
+            }
+
+            var win = new UpdateSettingsWindow(service!, config, _iconPath) { Owner = this };
+            win.ShowDialog();
+
+            if (ownsService)
+                service!.Dispose();
         }
 
         private void Help_Click(object sender, RoutedEventArgs e)
